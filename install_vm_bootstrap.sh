@@ -110,7 +110,7 @@ printf '%s\n' \
     $SUDO tee "$SUDOERS_FILE" >/dev/null
 
 $SUDO chmod 440 "$SUDOERS_FILE"
-$SUDO visudo -cf "$SUDOERS_FILE"
+$SUDO /usr/sbin/visudo -cf "$SUDOERS_FILE"
 
 # ------------------------------------------------------------
 # uv
