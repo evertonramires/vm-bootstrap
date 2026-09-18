@@ -7,6 +7,7 @@ set -Eeuo pipefail
 # ------------------------------------------------------------
 
 export DEBIAN_FRONTEND=noninteractive
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "ERROR: Run as root (sudo bash $0)"
