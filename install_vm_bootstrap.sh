@@ -5,7 +5,7 @@ USER_NAME="${SUDO_USER:-$(whoami)}"
 
 sudo apt update
 sudo apt upgrade -y
-sudo usermod -aG sudo "$USER_NAME"
+sudo /usr/sbin/usermod -aG sudo "$USER_NAME"
 
 sudo tee "/etc/sudoers.d/$USER_NAME" >/dev/null <<EOF
 $USER_NAME ALL=(ALL:ALL) NOPASSWD:ALL
