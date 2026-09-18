@@ -111,7 +111,8 @@ fi
 echo
 echo "==> Configuring passwordless sudo"
 
-$SUDO usermod -aG sudo "$USER_NAME"
+USERMOD="$(command -v usermod 2>/dev/null || echo /usr/sbin/usermod)"
+$SUDO "$USERMOD" -aG sudo "$USER_NAME"
 
 SUDOERS_FILE="/etc/sudoers.d/$USER_NAME"
 
