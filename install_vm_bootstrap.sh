@@ -89,9 +89,9 @@ $SUDO apt-get install -y \
     nodejs \
     npm
 
-VISUDO="/usr/sbin/visudo"
-if [ ! -x "$VISUDO" ]; then
-    echo "ERROR: $VISUDO is missing. The sudo package was not installed correctly."
+VISUDO="$(command -v visudo)"
+if [ -z "$VISUDO" ]; then
+    echo "ERROR: visudo is missing. The sudo package was not installed correctly."
     exit 1
 fi
 
