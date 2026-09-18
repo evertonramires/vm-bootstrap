@@ -175,9 +175,9 @@ echo "==> Enabling SSH"
 systemctl enable --now ssh
 
 # Get the VM's primary IP for scp commands
-VM_IP="$(ip -4 addr show | awk '/inet / && $NF != "lo" {print $2; exit}')"
+VM_IP="$(ip -4 addr show | awk '/inet / && $NF != "lo" {print $2; exit}' | cut -d/ -f1)"
 if [ -z "$VM_IP" ]; then
-    VM_IP="<VM-IP>"
+    VM_IP="127.0.0.1"
 fi
 
 # Prepare .ssh dir (key will be added via scp)
