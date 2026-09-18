@@ -97,7 +97,7 @@ fi
 
 # Debian calls the binary fdfind.
 if command -v fdfind >/dev/null 2>&1 && ! command -v fd >/dev/null 2>&1; then
-    $SUDO ln -s /usr/bin/fdfind /usr/local/bin/fd
+    $SUDO ln -sf /usr/bin/fdfind /usr/local/bin/fd
 fi
 
 # ------------------------------------------------------------
@@ -116,7 +116,7 @@ printf '%s\n' \
     $SUDO tee "$SUDOERS_FILE" >/dev/null
 
 $SUDO chmod 440 "$SUDOERS_FILE"
-    $SUDO "$VISUDO" -cf "$SUDOERS_FILE"
+$SUDO "$VISUDO" -cf "$SUDOERS_FILE"
 
 # ------------------------------------------------------------
 # uv
@@ -129,8 +129,8 @@ TMP_UV="$(mktemp)"
 
 curl -fsSL https://astral.sh/uv/install.sh -o "$TMP_UV"
 
-$SUDO install -m 0755 -o "$USER_NAME" -g "$USER_GROUP" \
-    "$TMP_UV" "$TMP_UV"
+# mktemp creates the file as 0600; the target user must be able to read it.
+chmod 0644 "$TMP_UV"
 
 run_as_user env \
     HOME="$USER_HOME" \
@@ -203,13 +203,13 @@ $SUDO systemctl enable --now ssh
 # curl | bash. Do not fall back to stdin: that can be EOF.
 # ------------------------------------------------------------
 
-if [ ! -r /dev/tty ]; then
+# /dev/tty can exist and look readable without a controlling terminal,
+# so test by actually opening it.
+if ! { exec 3</dev/tty; } 2>/dev/null; then
     echo "ERROR: An interactive terminal is required for SSH key and kubeconfig input."
     echo "Run this script from a terminal, not from a non-interactive pipe."
     exit 1
 fi
-
-exec 3</dev/tty
 
 # ------------------------------------------------------------
 # SSH public key
@@ -228,11 +228,12 @@ while true; do
         exit 1
     }
 
-    if [ -n "$SSH_KEY" ]; then
+    if [ -n "$SSH_KEY" ] &&
+       printf '%s\n' "$SSH_KEY" | ssh-keygen -l -f - >/dev/null 2>&1; then
         break
     fi
 
-    echo "SSH public key is required. Paste it and press Enter."
+    echo "A valid SSH public key is required. Paste it and press Enter."
 done
 
 $SUDO install -d -m 700 \
