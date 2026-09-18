@@ -3,10 +3,15 @@ set -Eeuo pipefail
 
 # ------------------------------------------------------------
 # VM BOOTSTRAP FOR AI AGENT VMS
-# Debian 13
+# Debian 13 — run as root: sudo bash install_vm_bootstrap.sh
 # ------------------------------------------------------------
 
 export DEBIAN_FRONTEND=noninteractive
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "ERROR: Run as root (sudo bash $0)"
+    exit 1
+fi
 
 # ------------------------------------------------------------
 # Determine target user
@@ -16,8 +21,6 @@ if [ -n "${VM_USER:-}" ]; then
     USER_NAME="$VM_USER"
 elif [ -n "${SUDO_USER:-}" ] && [ "${SUDO_USER}" != "root" ]; then
     USER_NAME="$SUDO_USER"
-elif [ "$(id -u)" -ne 0 ]; then
-    USER_NAME="$(id -un)"
 else
     USER_NAME="$(getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 && $1 != "nobody" && $7 !~ /(nologin|false)$/ {print $1; exit}')"
 fi
@@ -36,31 +39,8 @@ if [ -z "$USER_HOME" ]; then
     exit 1
 fi
 
-# ------------------------------------------------------------
-# Privilege handling
-# ------------------------------------------------------------
-
-if [ "$(id -u)" -eq 0 ]; then
-    SUDO=""
-else
-    if ! command -v sudo >/dev/null 2>&1; then
-        echo "ERROR: sudo is not installed."
-        echo "Run the bootstrap as root."
-        exit 1
-    fi
-    SUDO="sudo"
-fi
-
 run_as_user() {
-    if [ "$(id -u)" -eq 0 ]; then
-        if ! command -v runuser >/dev/null 2>&1; then
-            echo "ERROR: runuser not found. Install the 'util-linux' package."
-            exit 1
-        fi
-        runuser -u "$USER_NAME" -- "$@"
-    else
-        sudo -u "$USER_NAME" -H "$@"
-    fi
+    runuser -u "$USER_NAME" -- "$@"
 }
 
 # ------------------------------------------------------------
@@ -69,12 +49,12 @@ run_as_user() {
 
 echo
 echo "==> Updating Debian"
-$SUDO apt-get update
-$SUDO apt-get upgrade -y
+apt-get update
+apt-get upgrade -y
 
 echo
 echo "==> Installing packages"
-$SUDO apt-get install -y \
+apt-get install -y \
     ca-certificates \
     git \
     gh \
@@ -94,15 +74,9 @@ $SUDO apt-get install -y \
     nodejs \
     npm
 
-VISUDO="$(command -v visudo)"
-if [ -z "$VISUDO" ]; then
-    echo "ERROR: visudo is missing. The sudo package was not installed correctly."
-    exit 1
-fi
-
 # Debian calls the binary fdfind.
 if command -v fdfind >/dev/null 2>&1 && ! command -v fd >/dev/null 2>&1; then
-    $SUDO ln -sf /usr/bin/fdfind /usr/local/bin/fd
+    ln -sf /usr/bin/fdfind /usr/local/bin/fd
 fi
 
 # ------------------------------------------------------------
@@ -112,19 +86,16 @@ fi
 echo
 echo "==> Configuring passwordless sudo"
 
-# Add user to sudo group (skip if already a member)
-if ! id -nG "$USER_NAME" | grep -qw sudo; then
-    /usr/sbin/usermod -aG sudo "$USER_NAME"
-fi
+usermod -aG sudo "$USER_NAME"
 
 SUDOERS_FILE="/etc/sudoers.d/$USER_NAME"
 
 printf '%s\n' \
     "$USER_NAME ALL=(ALL:ALL) NOPASSWD:ALL" |
-    $SUDO tee "$SUDOERS_FILE" >/dev/null
+    tee "$SUDOERS_FILE" >/dev/null
 
-$SUDO chmod 440 "$SUDOERS_FILE"
-$SUDO "$VISUDO" -cf "$SUDOERS_FILE"
+chmod 440 "$SUDOERS_FILE"
+visudo -cf "$SUDOERS_FILE"
 
 # ------------------------------------------------------------
 # uv
@@ -136,8 +107,6 @@ echo "==> Installing uv"
 TMP_UV="$(mktemp)"
 
 curl -fsSL https://astral.sh/uv/install.sh -o "$TMP_UV"
-
-# mktemp creates the file as 0600; the target user must be able to read it.
 chmod 0644 "$TMP_UV"
 
 run_as_user env \
@@ -152,10 +121,10 @@ BASHRC="$USER_HOME/.bashrc"
 
 if ! grep -qF 'export PATH="$HOME/.local/bin:$PATH"' "$BASHRC" 2>/dev/null; then
     printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' |
-        $SUDO tee -a "$BASHRC" >/dev/null
+        tee -a "$BASHRC" >/dev/null
 fi
 
-$SUDO chown "$USER_NAME:$USER_GROUP" "$BASHRC"
+chown "$USER_NAME:$USER_GROUP" "$BASHRC"
 
 # ------------------------------------------------------------
 # kubectl
@@ -191,7 +160,7 @@ curl -fsSL -o "$TMP_KUBECTL/kubectl.sha256" \
     echo "$(cat kubectl.sha256)  kubectl" | sha256sum --check
 )
 
-$SUDO install -o root -g root -m 0755 \
+install -o root -g root -m 0755 \
     "$TMP_KUBECTL/kubectl" /usr/local/bin/kubectl
 
 rm -rf "$TMP_KUBECTL"
@@ -203,19 +172,14 @@ rm -rf "$TMP_KUBECTL"
 echo
 echo "==> Enabling SSH"
 
-$SUDO systemctl enable --now ssh
+systemctl enable --now ssh
 
 # ------------------------------------------------------------
 # Interactive input
-# IMPORTANT: use /dev/tty because this script may run via
-# curl | bash. Do not fall back to stdin: that can be EOF.
 # ------------------------------------------------------------
 
-# /dev/tty can exist and look readable without a controlling terminal,
-# so test by actually opening it.
 if ! { exec 3</dev/tty; } 2>/dev/null; then
     echo "ERROR: An interactive terminal is required for SSH key and kubeconfig input."
-    echo "Run this script from a terminal, not from a non-interactive pipe."
     exit 1
 fi
 
@@ -244,20 +208,20 @@ while true; do
     echo "A valid SSH public key is required. Paste it and press Enter."
 done
 
-$SUDO install -d -m 700 \
+install -d -m 700 \
     -o "$USER_NAME" -g "$USER_GROUP" \
     "$USER_HOME/.ssh"
 
 AUTH_KEYS="$USER_HOME/.ssh/authorized_keys"
 
 if [ ! -f "$AUTH_KEYS" ] ||
-   ! $SUDO grep -qxF "$SSH_KEY" "$AUTH_KEYS"; then
+   ! grep -qxF "$SSH_KEY" "$AUTH_KEYS"; then
     printf '%s\n' "$SSH_KEY" |
-        $SUDO tee -a "$AUTH_KEYS" >/dev/null
+        tee -a "$AUTH_KEYS" >/dev/null
 fi
 
-$SUDO chown "$USER_NAME:$USER_GROUP" "$AUTH_KEYS"
-$SUDO chmod 600 "$AUTH_KEYS"
+chown "$USER_NAME:$USER_GROUP" "$AUTH_KEYS"
+chmod 600 "$AUTH_KEYS"
 
 echo "SSH key installed."
 
@@ -277,7 +241,7 @@ IFS= read -r FIRST_LINE <&3 || {
 }
 
 if [ -n "$FIRST_LINE" ]; then
-    $SUDO install -d -m 700 \
+    install -d -m 700 \
         -o "$USER_NAME" -g "$USER_GROUP" \
         "$USER_HOME/.kube"
 
@@ -297,7 +261,7 @@ if [ -n "$FIRST_LINE" ]; then
         exit 1
     fi
 
-    $SUDO install -m 600 \
+    install -m 600 \
         -o "$USER_NAME" -g "$USER_GROUP" \
         "$KUBE_TMP" "$USER_HOME/.kube/config"
 
