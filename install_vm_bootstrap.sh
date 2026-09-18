@@ -174,106 +174,25 @@ echo "==> Enabling SSH"
 
 systemctl enable --now ssh
 
-# ------------------------------------------------------------
-# Interactive input
-# ------------------------------------------------------------
-
-if ! { exec 3</dev/tty; } 2>/dev/null; then
-    echo "ERROR: An interactive terminal is required for SSH key and kubeconfig input."
-    exit 1
+# Get the VM's primary IP for scp commands
+VM_IP="$(ip -4 addr show | awk '/inet / && $NF != "lo" {print $2; exit}')"
+if [ -z "$VM_IP" ]; then
+    VM_IP="<VM-IP>"
 fi
 
-# ------------------------------------------------------------
-# SSH public key
-# ------------------------------------------------------------
-
-echo
-echo "On your local machine, run one of these commands to get your SSH public key:"
-echo "  cat ~/.ssh/id_ed25519.pub"
-echo "  cat ~/.ssh/id_rsa.pub"
-echo
-echo "Paste the complete SSH public key here, then press Enter."
-
-while true; do
-    IFS= read -r SSH_KEY <&3 || {
-        echo "ERROR: Could not read the SSH key from the terminal."
-        exit 1
-    }
-
-    if [ -n "$SSH_KEY" ] &&
-       printf '%s\n' "$SSH_KEY" | ssh-keygen -l -f - >/dev/null 2>&1; then
-        break
-    fi
-
-    echo "A valid SSH public key is required. Paste it and press Enter."
-done
-
+# Prepare .ssh dir (key will be added via scp)
 install -d -m 700 \
     -o "$USER_NAME" -g "$USER_GROUP" \
     "$USER_HOME/.ssh"
 
-AUTH_KEYS="$USER_HOME/.ssh/authorized_keys"
+touch "$USER_HOME/.ssh/authorized_keys"
+chown "$USER_NAME:$USER_GROUP" "$USER_HOME/.ssh/authorized_keys"
+chmod 600 "$USER_HOME/.ssh/authorized_keys"
 
-if [ ! -f "$AUTH_KEYS" ] ||
-   ! grep -qxF "$SSH_KEY" "$AUTH_KEYS"; then
-    printf '%s\n' "$SSH_KEY" |
-        tee -a "$AUTH_KEYS" >/dev/null
-fi
-
-chown "$USER_NAME:$USER_GROUP" "$AUTH_KEYS"
-chmod 600 "$AUTH_KEYS"
-
-echo "SSH key installed."
-
-# ------------------------------------------------------------
-# Kubeconfig
-# ------------------------------------------------------------
-
-echo
-echo "Paste kubeconfig."
-echo "On your local machine, run this command to get it:"
-echo "  kubectl config view --raw"
-echo "Paste the complete output, then finish with KUBECONFIG_DONE on its own line."
-
-IFS= read -r FIRST_LINE <&3 || {
-    echo "ERROR: Could not read kubeconfig from the terminal."
-    exit 1
-}
-
-if [ -n "$FIRST_LINE" ]; then
-    install -d -m 700 \
-        -o "$USER_NAME" -g "$USER_GROUP" \
-        "$USER_HOME/.kube"
-
-    KUBE_TMP="$(mktemp)"
-
-    printf '%s\n' "$FIRST_LINE" > "$KUBE_TMP"
-
-    LINE=""
-    while IFS= read -r LINE <&3; do
-        [ "$LINE" = "KUBECONFIG_DONE" ] && break
-        printf '%s\n' "$LINE" >> "$KUBE_TMP"
-    done
-
-    if [ "$LINE" != "KUBECONFIG_DONE" ]; then
-        rm -f "$KUBE_TMP"
-        echo "ERROR: Kubeconfig input ended before KUBECONFIG_DONE."
-        exit 1
-    fi
-
-    install -m 600 \
-        -o "$USER_NAME" -g "$USER_GROUP" \
-        "$KUBE_TMP" "$USER_HOME/.kube/config"
-
-    rm -f "$KUBE_TMP"
-
-    echo "Kubeconfig installed."
-else
-    echo "ERROR: Kubeconfig is required."
-    exit 1
-fi
-
-exec 3<&-
+# Prepare .kube dir (config will be added via scp)
+install -d -m 700 \
+    -o "$USER_NAME" -g "$USER_GROUP" \
+    "$USER_HOME/.kube"
 
 # ------------------------------------------------------------
 # Final verification
@@ -309,16 +228,29 @@ ip -4 addr show |
     }'
 
 echo
-echo "SSH:"
-echo "  ssh $USER_NAME@<IP>"
-
-echo
 echo "Installed:"
 echo "  git gh curl jq rg fd tmux btop"
 echo "  net-tools openssh build-essential"
 echo "  python3 uv nodejs npm kubectl"
 
 echo
-echo "IMPORTANT:"
-echo "Log out/in once so the sudo group is reflected in normal sessions."
+echo "========================================"
+echo "NEXT STEPS (run on your LOCAL machine):"
+echo "========================================"
+echo
+echo "# 1. Copy your SSH key to the VM:"
+echo "scp ~/.ssh/id_ed25519.pub $USER_NAME@$VM_IP:/home/$USER_NAME/.ssh/authorized_keys"
+echo
+echo "# (or if you use RSA:)"
+echo "scp ~/.ssh/id_rsa.pub $USER_NAME@$VM_IP:/home/$USER_NAME/.ssh/authorized_keys"
+echo
+echo "# 2. Copy your kubeconfig:"
+echo "scp ~/.kube/config $USER_NAME@$VM_IP:/home/$USER_NAME/.kube/config"
+echo
+echo "# 3. SSH in:"
+echo "ssh $USER_NAME@$VM_IP"
+echo
+echo "NOTE: You'll need to log in once with a password (or use the console)"
+echo "to get shell access, then scp won't work until you have key auth."
+echo "Alternative: paste the key via the VM console/hypervisor UI."
 echo "========================================"
