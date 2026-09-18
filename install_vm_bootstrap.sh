@@ -89,6 +89,12 @@ $SUDO apt-get install -y \
     nodejs \
     npm
 
+VISUDO="/usr/sbin/visudo"
+if [ ! -x "$VISUDO" ]; then
+    echo "ERROR: $VISUDO is missing. The sudo package was not installed correctly."
+    exit 1
+fi
+
 # Debian calls the binary fdfind.
 if command -v fdfind >/dev/null 2>&1 && ! command -v fd >/dev/null 2>&1; then
     $SUDO ln -s /usr/bin/fdfind /usr/local/bin/fd
@@ -110,7 +116,7 @@ printf '%s\n' \
     $SUDO tee "$SUDOERS_FILE" >/dev/null
 
 $SUDO chmod 440 "$SUDOERS_FILE"
-$SUDO /usr/sbin/visudo -cf "$SUDOERS_FILE"
+    $SUDO "$VISUDO" -cf "$SUDOERS_FILE"
 
 # ------------------------------------------------------------
 # uv
