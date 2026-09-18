@@ -194,45 +194,57 @@ $SUDO systemctl enable --now ssh
 # ------------------------------------------------------------
 # Interactive input
 # IMPORTANT: use /dev/tty because this script may run via
-# curl | bash.
+# curl | bash. Do not fall back to stdin: that can be EOF.
 # ------------------------------------------------------------
 
-if [ -r /dev/tty ]; then
-    INPUT="/dev/tty"
-else
-    INPUT="/dev/stdin"
+if [ ! -r /dev/tty ]; then
+    echo "ERROR: An interactive terminal is required for SSH key and kubeconfig input."
+    echo "Run this script from a terminal, not from a non-interactive pipe."
+    exit 1
 fi
+
+exec 3</dev/tty
 
 # ------------------------------------------------------------
 # SSH public key
 # ------------------------------------------------------------
 
 echo
-echo "Paste your SSH public key."
-echo "Press Enter with an empty line to skip."
+echo "On your local machine, run one of these commands to get your SSH public key:"
+echo "  cat ~/.ssh/id_ed25519.pub"
+echo "  cat ~/.ssh/id_rsa.pub"
+echo
+echo "Paste the complete SSH public key here, then press Enter."
 
-IFS= read -r SSH_KEY < "$INPUT" || SSH_KEY=""
+while true; do
+    IFS= read -r SSH_KEY <&3 || {
+        echo "ERROR: Could not read the SSH key from the terminal."
+        exit 1
+    }
 
-if [ -n "$SSH_KEY" ]; then
-    $SUDO install -d -m 700 \
-        -o "$USER_NAME" -g "$USER_GROUP" \
-        "$USER_HOME/.ssh"
-
-    AUTH_KEYS="$USER_HOME/.ssh/authorized_keys"
-
-    if [ ! -f "$AUTH_KEYS" ] ||
-       ! $SUDO grep -qxF "$SSH_KEY" "$AUTH_KEYS"; then
-        printf '%s\n' "$SSH_KEY" |
-            $SUDO tee -a "$AUTH_KEYS" >/dev/null
+    if [ -n "$SSH_KEY" ]; then
+        break
     fi
 
-    $SUDO chown "$USER_NAME:$USER_GROUP" "$AUTH_KEYS"
-    $SUDO chmod 600 "$AUTH_KEYS"
+    echo "SSH public key is required. Paste it and press Enter."
+done
 
-    echo "SSH key installed."
-else
-    echo "SSH key skipped."
+$SUDO install -d -m 700 \
+    -o "$USER_NAME" -g "$USER_GROUP" \
+    "$USER_HOME/.ssh"
+
+AUTH_KEYS="$USER_HOME/.ssh/authorized_keys"
+
+if [ ! -f "$AUTH_KEYS" ] ||
+   ! $SUDO grep -qxF "$SSH_KEY" "$AUTH_KEYS"; then
+    printf '%s\n' "$SSH_KEY" |
+        $SUDO tee -a "$AUTH_KEYS" >/dev/null
 fi
+
+$SUDO chown "$USER_NAME:$USER_GROUP" "$AUTH_KEYS"
+$SUDO chmod 600 "$AUTH_KEYS"
+
+echo "SSH key installed."
 
 # ------------------------------------------------------------
 # Kubeconfig
@@ -240,10 +252,14 @@ fi
 
 echo
 echo "Paste kubeconfig."
-echo "Press Enter immediately to skip."
-echo "Otherwise finish by typing KUBECONFIG_DONE on its own line."
+echo "On your local machine, run this command to get it:"
+echo "  kubectl config view --raw"
+echo "Paste the complete output, then finish with KUBECONFIG_DONE on its own line."
 
-IFS= read -r FIRST_LINE < "$INPUT" || FIRST_LINE=""
+IFS= read -r FIRST_LINE <&3 || {
+    echo "ERROR: Could not read kubeconfig from the terminal."
+    exit 1
+}
 
 if [ -n "$FIRST_LINE" ]; then
     $SUDO install -d -m 700 \
@@ -254,10 +270,17 @@ if [ -n "$FIRST_LINE" ]; then
 
     printf '%s\n' "$FIRST_LINE" > "$KUBE_TMP"
 
-    while IFS= read -r LINE < "$INPUT"; do
+    LINE=""
+    while IFS= read -r LINE <&3; do
         [ "$LINE" = "KUBECONFIG_DONE" ] && break
         printf '%s\n' "$LINE" >> "$KUBE_TMP"
     done
+
+    if [ "$LINE" != "KUBECONFIG_DONE" ]; then
+        rm -f "$KUBE_TMP"
+        echo "ERROR: Kubeconfig input ended before KUBECONFIG_DONE."
+        exit 1
+    fi
 
     $SUDO install -m 600 \
         -o "$USER_NAME" -g "$USER_GROUP" \
@@ -267,8 +290,11 @@ if [ -n "$FIRST_LINE" ]; then
 
     echo "Kubeconfig installed."
 else
-    echo "Kubeconfig skipped."
+    echo "ERROR: Kubeconfig is required."
+    exit 1
 fi
+
+exec 3<&-
 
 # ------------------------------------------------------------
 # Final verification
