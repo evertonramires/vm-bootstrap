@@ -1,5 +1,28 @@
 # vm-bootstrap
 
+Bootstrap a fresh Debian 13 VM for AI agent work.
+
+## Quick start (run as your normal user)
+
 ```bash
-USER_NAME="$(id -un)" && su -c "apt update && apt install -y sudo curl && /usr/sbin/usermod -aG sudo '$USER_NAME' && VM_USER='$USER_NAME' curl -fsSL https://raw.githubusercontent.com/evertonramires/vm-bootstrap/main/install_vm_bootstrap.sh | bash"
+VM_USER="$(id -un)" sudo bash -c 'apt-get update && apt-get install -y sudo curl && usermod -aG sudo "$0" && export VM_USER="$0" && curl -fsSL https://raw.githubusercontent.com/evertonramires/vm-bootstrap/main/install_vm_bootstrap.sh | bash' -- "$(id -un)"
 ```
+
+## Step by step
+
+```bash
+sudo apt-get update
+sudo apt-get install -y sudo curl
+VM_USER="$(id -un)" sudo usermod -aG sudo "$(id -un)"
+VM_USER="$(id -un)" curl -fsSL https://raw.githubusercontent.com/evertonramires/vm-bootstrap/main/install_vm_bootstrap.sh | sudo bash
+```
+
+## What it does
+
+- Updates and upgrades the system
+- Installs: git, gh, curl, jq, ripgrep, fd, tmux, btop, net-tools, openssh, build-essential, python3, nodejs, npm
+- Configures passwordless sudo for your user
+- Installs uv (Python package manager)
+- Installs kubectl (latest stable)
+- Enables SSH server
+- Prompts you to paste your SSH public key and kubeconfig

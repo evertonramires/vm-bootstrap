@@ -53,6 +53,10 @@ fi
 
 run_as_user() {
     if [ "$(id -u)" -eq 0 ]; then
+        if ! command -v runuser >/dev/null 2>&1; then
+            echo "ERROR: runuser not found. Install the 'util-linux' package."
+            exit 1
+        fi
         runuser -u "$USER_NAME" -- "$@"
     else
         sudo -u "$USER_NAME" -H "$@"
@@ -107,7 +111,7 @@ fi
 echo
 echo "==> Configuring passwordless sudo"
 
-$SUDO /usr/sbin/usermod -aG sudo "$USER_NAME"
+$SUDO usermod -aG sudo "$USER_NAME"
 
 SUDOERS_FILE="/etc/sudoers.d/$USER_NAME"
 
