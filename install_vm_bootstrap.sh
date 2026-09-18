@@ -88,6 +88,7 @@ $SUDO apt-get install -y \
     openssh-client \
     openssh-server \
     sudo \
+    passwd \
     build-essential \
     python3 \
     nodejs \
@@ -111,8 +112,10 @@ fi
 echo
 echo "==> Configuring passwordless sudo"
 
-USERMOD="$(command -v usermod 2>/dev/null || echo /usr/sbin/usermod)"
-$SUDO "$USERMOD" -aG sudo "$USER_NAME"
+# Add user to sudo group (skip if already a member)
+if ! id -nG "$USER_NAME" | grep -qw sudo; then
+    /usr/sbin/usermod -aG sudo "$USER_NAME"
+fi
 
 SUDOERS_FILE="/etc/sudoers.d/$USER_NAME"
 

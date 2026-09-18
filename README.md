@@ -5,15 +5,15 @@ Bootstrap a fresh Debian 13 VM for AI agent work.
 ## Quick start (run as your normal user)
 
 ```bash
-VM_USER="$(id -un)" sudo bash -c 'apt-get update && apt-get install -y sudo curl && usermod -aG sudo "$0" && export VM_USER="$0" && curl -fsSL https://raw.githubusercontent.com/evertonramires/vm-bootstrap/main/install_vm_bootstrap.sh | bash' -- "$(id -un)"
+sudo bash -c 'apt-get update && apt-get install -y sudo curl passwd && /usr/sbin/usermod -aG sudo "$0" && export VM_USER="$0" && curl -fsSL https://raw.githubusercontent.com/evertonramires/vm-bootstrap/main/install_vm_bootstrap.sh | bash' -- "$(id -un)"
 ```
 
 ## Step by step
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y sudo curl
-VM_USER="$(id -un)" sudo usermod -aG sudo "$(id -un)"
+sudo apt-get install -y sudo curl passwd
+sudo /usr/sbin/usermod -aG sudo "$(id -un)"
 VM_USER="$(id -un)" curl -fsSL https://raw.githubusercontent.com/evertonramires/vm-bootstrap/main/install_vm_bootstrap.sh | sudo bash
 ```
 
